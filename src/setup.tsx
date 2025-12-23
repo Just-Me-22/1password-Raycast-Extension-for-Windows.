@@ -54,6 +54,12 @@ export default function Setup() {
     setSignInMethod("desktop");
     
     try {
+      await showToast({
+        style: Toast.Style.Animated,
+        title: "Connecting to 1Password app...",
+        message: "Please wait",
+      });
+      
       // Try sign-in - desktop app integration should handle it automatically
       const success = await signInWithCredentials();
       
@@ -69,8 +75,8 @@ export default function Setup() {
       } else {
         await showToast({
           style: Toast.Style.Failure,
-          title: "Desktop app not available",
-          message: "Please open 1Password app and enable CLI integration in Settings → Developer",
+          title: "Desktop app integration not working",
+          message: "Please ensure 1Password app is open, unlocked, and CLI integration is enabled",
         });
         setIsSigningIn(false);
       }
@@ -78,7 +84,7 @@ export default function Setup() {
       await showToast({
         style: Toast.Style.Failure,
         title: "Sign-in failed",
-        message: error.message || "Please enable desktop app integration in 1Password app",
+        message: error.message || "Please check desktop app integration settings",
       });
       setIsSigningIn(false);
     }

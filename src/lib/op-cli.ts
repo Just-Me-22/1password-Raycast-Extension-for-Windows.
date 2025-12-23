@@ -270,142 +270,252 @@ export async function signIn(emailOrAccount?: string): Promise<boolean> {
 }
 
 /**
- * Checks if 1Password desktop app integration is available
+ * Checks if 1Password desktop app integration is available and working
+ * Desktop app integration allows CLI to use the app's session automatically
  */
 export async function checkDesktopAppIntegration(): Promise<boolean> {
   try {
-    // Try to list accounts - if desktop app is integrated, this should work
-    // without requiring sign-in
-    await execAsync("op account list", {
-      shell: "powershell.exe",
-      maxBuffer: 1024 * 1024,
-    });
-    return true;
-  } catch {
-    // If it fails, desktop app integration might not be available
-    // But it could also mean we're just not signed in
-    // Check if op command works at all
+    // First check if CLI is installed
+    await execAsync("op --version");
+    
+    // Try to check if we can communicate with desktop app
+    // If desktop app is integrated, op account list should work without sign-in
     try {
-      await execAsync("op --version");
-      // CLI works, but we can't determine desktop app status for sure
-      // Return true optimistically - user can try desktop app sign-in
+      await execAsync("op account list", {
+        shell: "powershell.exe",
+        maxBuffer: 1024 * 1024,
+        timeout: 3000,
+      });
+      // If this works, desktop app integration is likely working
       return true;
     } catch {
-      return false;
+      // Account list failed, but that's okay - we might just not be signed in
+      // Desktop app integration might still be available
+      // Return true optimistically - the sign-in attempt will determine if it works
+      return true;
     }
+  } catch {
+    // CLI not installed
+    return false;
   }
 }
 
 /**
- * Signs in using email and password credentials
- * Tries to add account first, then sign in
+ * Signs in using desktop app integration or email
+ * If desktop app is integrated, sign-in should be automatic
  */
 export async function signInWithCredentials(email?: string, password?: string): Promise<boolean> {
   try {
-    // If desktop app is integrated, try simple signin first (should work automatically)
-    if (!email && !password) {
+    // If no email provided, try desktop app integration sign-in first
+    if (!email) {
+      // When desktop app is integrated, op signin should work automatically
+      // Try both regular signin and --raw flag to get the session token
       try {
-        const result = await signIn();
-        return result;
-      } catch {
-        // Fall through to credential-based sign-in
-      }
-    }
-
-    // If we have credentials, try to use them
-    if (email && password) {
-      // 1Password CLI doesn't accept password directly via command line for security
-      // But we can try to add the account first, then sign in
-      // Note: This may still require interactive authentication
-      
-      // Try account add with email (password will be prompted or use desktop app)
-      try {
-        // First, try to add the account if it doesn't exist
-        // This might prompt for password, but if desktop app is open, it should use that
-        const addCommand = email.includes("@") 
-          ? `echo "${password}" | op account add --address ${email.split("@")[1] || email} --email ${email}`
-          : `echo "${password}" | op account add ${email}`;
+        // First try with --raw flag to get just the token
+        let stdout = "";
+        let stderr = "";
         
-        // Actually, op account add doesn't work this way - it requires interactive input
-        // Instead, let's try signin which should use desktop app if available
-        // or prompt for password in a way we can handle
-      } catch {
-        // Account might already exist, continue to sign-in
+        try {
+          const result = await execAsync("op signin --raw", {
+            shell: "powershell.exe",
+            maxBuffer: 1024 * 1024,
+            timeout: 15000,
+          });
+          stdout = result.stdout;
+          stderr = result.stderr || "";
+        } catch (rawError: any) {
+          // --raw might not work, try regular signin
+          try {
+            const result = await execAsync("op signin", {
+              shell: "powershell.exe",
+              maxBuffer: 1024 * 1024,
+              timeout: 15000,
+            });
+            stdout = result.stdout;
+            stderr = result.stderr || "";
+          } catch (signinError: any) {
+            stdout = signinError.stdout || "";
+            stderr = signinError.stderr || signinError.message || "";
+          }
+        }
+
+        // Check if we got a raw token (from --raw flag)
+        const rawToken = stdout.trim();
+        if (rawToken && !rawToken.includes("$env:") && rawToken.length > 20) {
+          // We got a raw token, need to find the account to set the right env var
+          try {
+            const accountList = await execAsync("op account list --format json", {
+              shell: "powershell.exe",
+              maxBuffer: 1024 * 1024,
+            });
+            const accounts = JSON.parse(accountList.stdout);
+            if (accounts && accounts.length > 0) {
+              const account = accounts[0];
+              const envVarName = `OP_SESSION_${account.user_uuid || account.shorthand || "default"}`;
+              
+              // Set in current process
+              process.env[envVarName] = rawToken;
+              
+              // Set it globally
+              try {
+                await execAsync(
+                  `powershell.exe -Command "[System.Environment]::SetEnvironmentVariable('${envVarName}', '${rawToken}', 'User')"`,
+                  { shell: "cmd.exe" }
+                );
+              } catch {
+                // Continue anyway
+              }
+            }
+          } catch {
+            // Couldn't get account info, but we have the token
+          }
+        } else {
+          // Check if we got a session token command (standard format)
+          const sessionCommandMatch = stdout.match(/(\$env:OP_SESSION_\w+="[^"]+");/);
+          
+          if (sessionCommandMatch && sessionCommandMatch[1]) {
+            const sessionCommand = sessionCommandMatch[1];
+            const envVarMatch = sessionCommand.match(/\$env:(OP_SESSION_\w+)="([^"]+)"/);
+            
+            if (envVarMatch && envVarMatch[1] && envVarMatch[2]) {
+              const envVarName = envVarMatch[1];
+              const sessionToken = envVarMatch[2];
+              
+              // Set in current process
+              process.env[envVarName] = sessionToken;
+              
+              // Execute PowerShell command to set it globally
+              try {
+                // Use Invoke-Expression to execute the command
+                const escapedCommand = sessionCommand.replace(/'/g, "''").replace(/"/g, '\\"');
+                await execAsync(
+                  `powershell.exe -Command "Invoke-Expression '${escapedCommand}'"`,
+                  { shell: "cmd.exe" }
+                );
+              } catch {
+                // Try setting via Environment variable directly
+                try {
+                  await execAsync(
+                    `powershell.exe -Command "[System.Environment]::SetEnvironmentVariable('${envVarName}', '${sessionToken}', 'User')"`,
+                    { shell: "cmd.exe" }
+                  );
+                } catch {
+                  // Continue anyway - we have it in process.env
+                }
+              }
+            }
+          }
+        }
+        
+        // Verify sign-in worked
+        const signedIn = await isSignedIn();
+        if (signedIn) {
+          return true;
+        }
+        
+        // If we got stderr but no session token, desktop app integration might not be working
+        if (stderr && (stderr.includes("not signed in") || stderr.includes("authentication"))) {
+          throw new Error("Desktop app integration not working. Please ensure 1Password app is open, unlocked, and CLI integration is enabled in Settings → Developer.");
+        }
+      } catch (error: any) {
+        // Check if we're actually signed in despite the error
+        const signedIn = await isSignedIn();
+        if (signedIn) {
+          return true;
+        }
+        
+        // If error suggests desktop app isn't working, throw helpful error
+        if (error.message?.includes("not signed in") || error.message?.includes("authentication") || error.message?.includes("timeout")) {
+          throw new Error("Desktop app integration not working. Please ensure:\n1. 1Password app is open and unlocked\n2. CLI integration is enabled (Settings → Developer → 'Integrate with 1Password CLI')\n3. Try signing in with email instead");
+        }
+        throw error;
       }
     }
 
-    // Try sign-in - if desktop app is integrated, this should work automatically
-    // If not, it will require interactive authentication
-    let command = "op signin";
-    
+    // If email provided, try sign-in with email
     if (email) {
+      let command = "op signin";
+      
       if (email.includes("@")) {
         command = `op signin ${email}`;
       } else {
         command = `op signin --account ${email}`;
       }
-    }
 
-    // Execute signin - if desktop app is integrated, this should work
-    // Otherwise it will output the PowerShell command we need to execute
-    const { stdout, stderr } = await execAsync(command, {
-      shell: "powershell.exe",
-      maxBuffer: 1024 * 1024,
-    });
+      // Execute signin - if desktop app is integrated, this should work automatically
+      const { stdout, stderr } = await execAsync(command, {
+        shell: "powershell.exe",
+        maxBuffer: 1024 * 1024,
+        timeout: 10000,
+      });
 
-    // Parse the output to extract the PowerShell command
-    const sessionCommandMatch = stdout.match(/(\$env:OP_SESSION_\w+="[^"]+");/);
-    
-    if (sessionCommandMatch && sessionCommandMatch[1]) {
-      const sessionCommand = sessionCommandMatch[1];
-      const envVarMatch = sessionCommand.match(/\$env:(OP_SESSION_\w+)="([^"]+)"/);
+      // Parse the output to extract the PowerShell command
+      const sessionCommandMatch = stdout.match(/(\$env:OP_SESSION_\w+="[^"]+");/);
       
-      if (envVarMatch && envVarMatch[1] && envVarMatch[2]) {
-        const envVarName = envVarMatch[1];
-        const sessionToken = envVarMatch[2];
+      if (sessionCommandMatch && sessionCommandMatch[1]) {
+        const sessionCommand = sessionCommandMatch[1];
+        const envVarMatch = sessionCommand.match(/\$env:(OP_SESSION_\w+)="([^"]+)"/);
         
-        // Set in current process
-        process.env[envVarName] = sessionToken;
-        
-        // Execute PowerShell command to set it globally
-        try {
-          await execAsync(
-            `powershell.exe -Command "Invoke-Expression '${sessionCommand}'"`,
-            { shell: "cmd.exe" }
-          );
-        } catch {
-          // Try direct execution
+        if (envVarMatch && envVarMatch[1] && envVarMatch[2]) {
+          const envVarName = envVarMatch[1];
+          const sessionToken = envVarMatch[2];
+          
+          // Set in current process
+          process.env[envVarName] = sessionToken;
+          
+          // Execute PowerShell command to set it globally
           try {
+            // Method 1: Use Invoke-Expression with proper escaping
+            const escapedCommand = sessionCommand.replace(/'/g, "''").replace(/"/g, '\\"');
             await execAsync(
-              `powershell.exe -Command "${sessionCommand}"`,
+              `powershell.exe -Command "Invoke-Expression '${escapedCommand}'"`,
               { shell: "cmd.exe" }
             );
           } catch {
-            // Continue anyway - we have it in process.env
+            // Method 2: Try direct execution
+            try {
+              await execAsync(
+                `powershell.exe -Command "${sessionCommand}"`,
+                { shell: "cmd.exe" }
+              );
+            } catch {
+              // Method 3: Set it via [System.Environment]::SetEnvironmentVariable
+              try {
+                const varName = envVarName;
+                const varValue = sessionToken;
+                await execAsync(
+                  `powershell.exe -Command "[System.Environment]::SetEnvironmentVariable('${varName}', '${varValue}', 'User')"`,
+                  { shell: "cmd.exe" }
+                );
+              } catch {
+                // Continue anyway - we have it in process.env
+              }
+            }
           }
         }
+        
+        // Verify sign-in
+        const signedIn = await isSignedIn();
+        return signedIn;
       }
-      
-      // Verify sign-in
+
+      // Check if we're signed in (desktop app might have handled it silently)
       const signedIn = await isSignedIn();
-      return signedIn;
+      if (signedIn) {
+        return true;
+      }
+
+      // If we get stderr about authentication, desktop app integration isn't working
+      if (stderr && (stderr.includes("authentication") || stderr.includes("QR") || stderr.includes("not signed in"))) {
+        throw new Error("Desktop app integration not working. Please ensure 1Password app is open, unlocked, and CLI integration is enabled in Settings → Developer.");
+      }
     }
 
-    // Check if we're signed in (desktop app might have handled it)
+    // Final check - are we signed in?
     const signedIn = await isSignedIn();
-    if (signedIn) {
-      return true;
-    }
-
-    // If we get here and have stderr, it might need interactive auth
-    if (stderr && (stderr.includes("authentication") || stderr.includes("QR"))) {
-      throw new Error("Interactive authentication required. Please enable desktop app integration in 1Password app settings, or sign in manually.");
-    }
-
-    return false;
+    return signedIn;
   } catch (error: any) {
-    // If desktop app integration is available, sign-in should work
-    // Check if we're actually signed in now
+    // Check one more time if we're signed in (might have worked despite error)
     try {
       const signedIn = await isSignedIn();
       if (signedIn) {
@@ -415,7 +525,7 @@ export async function signInWithCredentials(email?: string, password?: string): 
       // Not signed in
     }
 
-    throw new Error(`Sign-in failed: ${error.message || "Please enable desktop app integration or sign in manually"}`);
+    throw error;
   }
 }
 
