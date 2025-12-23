@@ -32,7 +32,6 @@ export default function Setup() {
       setIsInstalled(installed);
 
       if (installed) {
-        // Check for desktop app integration
         const desktopAppAvailable = await checkDesktopAppIntegration();
         setHasDesktopApp(desktopAppAvailable);
 
@@ -60,7 +59,6 @@ export default function Setup() {
         message: "Please wait",
       });
       
-      // Try sign-in - desktop app integration should handle it automatically
       const success = await signInWithCredentials();
       
       if (success) {
@@ -104,8 +102,6 @@ export default function Setup() {
     setSignInMethod("credentials");
     
     try {
-      // Try sign-in with email - if desktop app is integrated, it should work
-      // If not, it will guide the user
       const success = await signInWithCredentials(email.trim());
       
       if (success) {
@@ -172,7 +168,7 @@ export default function Setup() {
       >
         <Form.Description
           title="Sign In to 1Password"
-          text="Enter your email. If you have the 1Password desktop app open with CLI integration enabled, sign-in will be automatic!"
+          text="Enter your email. If you have the 1Password desktop app open with CLI integration enabled, sign-in will be automatic."
         />
         <Form.TextField
           id="email"
@@ -181,23 +177,23 @@ export default function Setup() {
           value={email}
           onChange={setEmail}
           autoFocus
-          info="Your 1Password account email. Desktop app integration makes this automatic!"
+          info="Your 1Password account email. Desktop app integration makes this automatic."
         />
         {isSigningIn && (
           <Form.Description 
             title="Status" 
-            text="Signing in... If desktop app is open, this will be instant!" 
+            text="Signing in... If desktop app is open, this will be instant." 
           />
         )}
         <Form.Description
-          title="💡 Tip"
-          text="For the easiest experience, open the 1Password app and enable CLI integration in Settings → Developer. Then sign-in becomes automatic!"
+          title="Tip"
+          text="For the easiest experience, open the 1Password app and enable CLI integration in Settings → Developer. Then sign-in becomes automatic."
         />
       </Form>
     );
   }
 
-  const markdown = `# Welcome to 1Password Extension! 🔐
+  const markdown = `# Welcome to 1Password Extension
 
 ${getStatusMarkdown(isInstalled, isAuthenticated, hasDesktopApp)}
 
@@ -220,7 +216,7 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated, hasDesktopApp, isSigning
           {isInstalled && !isAuthenticated && !isSigningIn && (
             <>
               <Action
-                title="Sign In with Desktop App (Easiest!)"
+                title="Sign In with Desktop App"
                 icon={Icon.Star}
                 shortcut={{ modifiers: ["ctrl"], key: "d" }}
                 onAction={handleDesktopAppSignIn}
@@ -266,25 +262,25 @@ function getStatusMarkdown(
   hasDesktopApp: boolean | null
 ): string {
   if (!isInstalled) {
-    return `## ❌ 1Password CLI Not Installed
+    return `## 1Password CLI Not Installed
 
-Don't worry! It only takes a minute to install.`;
+Installation takes just a minute.`;
   }
 
   if (!isAuthenticated) {
     let desktopAppNote = "";
     if (hasDesktopApp) {
-      desktopAppNote = "\n\n⭐ **Great news!** Desktop app integration is available. Sign-in can be automatic!";
+      desktopAppNote = "\n\nDesktop app integration is available. Sign-in can be automatic.";
     }
     
-    return `## ✅ CLI Installed | ❌ Not Signed In
+    return `## CLI Installed | Not Signed In
 
-Ready to sign in? Choose the easiest method!${desktopAppNote}`;
+Ready to sign in? Choose your preferred method.${desktopAppNote}`;
   }
 
-  return `## ✅ All Set!
+  return `## All Set
 
-You're ready to use the extension!`;
+You're ready to use the extension.`;
 }
 
 function getInstructionsMarkdown(
@@ -295,14 +291,12 @@ function getInstructionsMarkdown(
   signInMethod: "desktop" | "credentials" | null
 ): string {
   if (!isInstalled) {
-    return `### Quick Setup (2 minutes)
+    return `### Quick Setup
 
-1. **Click the button below** to open the installation guide
-2. **Download** the Windows installer  
-3. **Run** the installer
-4. **Come back here** to sign in
-
-That's it! 🎉`;
+1. Click the button below to open the installation guide
+2. Download the Windows installer  
+3. Run the installer
+4. Return here to sign in`;
   }
 
   if (!isAuthenticated) {
@@ -310,64 +304,62 @@ That's it! 🎉`;
       if (signInMethod === "desktop") {
         return `### Signing In with Desktop App...
 
-**Please wait** while we connect to your 1Password app.
+Please wait while we connect to your 1Password app.
 
-If the app is open and unlocked, this should be instant! ⚡`;
+If the app is open and unlocked, this should be instant.`;
       }
       return `### Signing In...
 
-**Please wait** while we authenticate.
+Please wait while we authenticate.
 
-If you have the desktop app open with CLI integration enabled, this will be automatic! ⚡`;
+If you have the desktop app open with CLI integration enabled, this will be automatic.`;
     }
 
     if (hasDesktopApp) {
-      return `### Two Easy Ways to Sign In
+      return `### Two Ways to Sign In
 
-#### ⭐ Option 1: Desktop App (Recommended - Instant!)
-1. **Make sure 1Password app is open** and unlocked
-2. **Enable CLI integration** (if not already):
+#### Option 1: Desktop App (Recommended)
+1. Make sure 1Password app is open and unlocked
+2. Enable CLI integration (if not already):
    - Open 1Password app
-   - Settings → Developer → "Integrate with 1Password CLI" ✅
-3. **Click "Sign In with Desktop App"** above (or press \`Ctrl+D\`)
-4. **Done!** No password needed - uses Windows Hello! 🎉
+   - Settings → Developer → "Integrate with 1Password CLI"
+3. Click "Sign In with Desktop App" above (or press \`Ctrl+D\`)
+4. Done. No password needed - uses Windows Hello.
 
 #### Option 2: Email Sign-In
-1. **Click "Sign In with Email"** above (or press \`Ctrl+S\`)
-2. **Enter your email**
-3. **If desktop app is integrated**, sign-in is automatic!
-4. **If not**, you'll be guided to enable integration
+1. Click "Sign In with Email" above (or press \`Ctrl+S\`)
+2. Enter your email
+3. If desktop app is integrated, sign-in is automatic
+4. If not, you'll be guided to enable integration
 
-**Which is better?**
-- Desktop app = **Fastest, most secure** (Windows Hello, no password typing)
+Which is better?
+- Desktop app = Fastest, most secure (Windows Hello, no password typing)
 - Email = Works but requires desktop app integration for automation`;
     }
 
     return `### Easy Sign-In
 
 #### Recommended: Desktop App Integration
-1. **Install 1Password desktop app** (if not already)
-2. **Open the app** and unlock it
-3. **Enable CLI integration**:
-   - Settings → Developer → "Integrate with 1Password CLI" ✅
-4. **Click "Sign In with Desktop App"** above
-5. **Done!** Instant and secure! ⚡
+1. Install 1Password desktop app (if not already)
+2. Open the app and unlock it
+3. Enable CLI integration:
+   - Settings → Developer → "Integrate with 1Password CLI"
+4. Click "Sign In with Desktop App" above
+5. Done. Instant and secure.
 
 #### Alternative: Email Sign-In
-1. **Click "Sign In with Email"** above
-2. **Enter your email**
-3. **Follow the prompts** to complete sign-in
+1. Click "Sign In with Email" above
+2. Enter your email
+3. Follow the prompts to complete sign-in
 
-**💡 Pro Tip:** Desktop app integration makes everything automatic and uses Windows Hello for security!`;
+Pro Tip: Desktop app integration makes everything automatic and uses Windows Hello for security.`;
   }
 
-  return `### You're Ready to Go!
+  return `### You're Ready to Go
 
 Try these commands:
 
 - **Search Items** - Find and copy passwords instantly
 - **Generate Password** - Create secure passwords  
-- **Manage Vaults** - Browse your vaults
-
-Enjoy! 🎉`;
+- **Manage Vaults** - Browse your vaults`;
 }

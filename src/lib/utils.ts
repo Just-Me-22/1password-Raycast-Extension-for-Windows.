@@ -1,8 +1,6 @@
+import { Icon } from "@raycast/api";
 import { OnePasswordItem, SearchResult } from "./types";
 
-/**
- * Searches items by title and other fields
- */
 export function searchItems(items: OnePasswordItem[], query: string): SearchResult[] {
   if (!query.trim()) {
     return items.map((item) => ({ item }));
@@ -67,37 +65,31 @@ export function searchItems(items: OnePasswordItem[], query: string): SearchResu
   return results.sort((a, b) => (b.score || 0) - (a.score || 0));
 }
 
-/**
- * Gets icon for item category
- */
-export function getCategoryIcon(category: string): string {
-  const iconMap: Record<string, string> = {
-    Login: "🔐",
-    Password: "🔑",
-    "Credit Card": "💳",
-    "Secure Note": "📝",
-    Identity: "👤",
-    "Bank Account": "🏦",
-    Database: "🗄️",
-    DriverLicense: "🪪",
-    EmailAccount: "📧",
-    OutdoorLicense: "🎣",
-    Passport: "📘",
-    RewardsProgram: "🎁",
-    SocialSecurityNumber: "🆔",
-    SoftwareLicense: "💿",
-    SSHKey: "🔧",
-    WirelessRouter: "📡",
-    Server: "🖥️",
-    API: "🔌",
+export function getCategoryIcon(category: string): Icon {
+  const iconMap: Record<string, Icon> = {
+    Login: Icon.Lock,
+    Password: Icon.Key,
+    "Credit Card": Icon.CreditCard,
+    "Secure Note": Icon.Document,
+    Identity: Icon.Person,
+    "Bank Account": Icon.BankNote,
+    Database: Icon.HardDrive,
+    DriverLicense: Icon.Document,
+    EmailAccount: Icon.Envelope,
+    OutdoorLicense: Icon.Tag,
+    Passport: Icon.Document,
+    RewardsProgram: Icon.Gift,
+    SocialSecurityNumber: Icon.Document,
+    SoftwareLicense: Icon.Circle,
+    SSHKey: Icon.WrenchScrewdriver,
+    WirelessRouter: Icon.Signal0,
+    Server: Icon.ComputerChip,
+    API: Icon.Plug,
   };
 
-  return iconMap[category] || "📦";
+  return iconMap[category] || Icon.Tag;
 }
 
-/**
- * Formats a date string for display
- */
 export function formatDate(dateString: string): string {
   try {
     const date = new Date(dateString);
@@ -113,32 +105,19 @@ export function formatDate(dateString: string): string {
   }
 }
 
-/**
- * Masks a password for display
- */
 export function maskPassword(password: string): string {
   return "•".repeat(Math.min(password.length, 20));
 }
 
-/**
- * Gets field by label from an item
- */
 export function getFieldByLabel(item: OnePasswordItem, label: string): string | undefined {
   return item.fields?.find((f) => f.label.toLowerCase() === label.toLowerCase())?.value;
 }
 
-/**
- * Gets field by purpose (e.g., "username", "password")
- */
 export function getFieldByPurpose(item: OnePasswordItem, purpose: string): string | undefined {
   return item.fields?.find((f) => f.purpose?.toLowerCase() === purpose.toLowerCase())?.value;
 }
 
-/**
- * Gets OTP field from an item (if available)
- */
 export function getOTPField(item: OnePasswordItem): string | undefined {
-  // Look for OTP in fields
   const otpField = item.fields?.find(
     (f) => f.type === "otp" || f.label.toLowerCase().includes("otp") || f.label.toLowerCase().includes("totp")
   );
