@@ -57,17 +57,23 @@ async function getSessionToken(): Promise<{ name: string; value: string } | null
     const opCmd = await findOpPath();
     const command = opCmd.includes(" ") ? `& "${opCmd}"` : opCmd;
     
-    const { stdout } = await execAsync(
+    const { stdout, stderr } = await execAsync(
       `powershell.exe -NoProfile -WindowStyle Hidden -Command "${command} signin --raw"`,
       {
         windowsHide: true,
         maxBuffer: 1024 * 1024,
-        timeout: 15000,
+        timeout: 20000,
       }
     );
     
     const token = stdout.trim();
-    if (token && token.length > 20 && !token.includes("$env:")) {
+    const errorOutput = stderr?.trim() || "";
+    
+    if (errorOutput.includes("cannot connect to 1Password app")) {
+      throw new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app");
+    }
+    
+    if (token && token.length > 20 && !token.includes("$env:") && !token.includes("ERROR")) {
       try {
         const accountOutput = await execAsync(
           `powershell.exe -NoProfile -WindowStyle Hidden -Command "${command} account list --format json"`,
@@ -93,7 +99,11 @@ async function getSessionToken(): Promise<{ name: string; value: string } | null
         return cachedSessionToken;
       }
     }
-  } catch (error) {
+  } catch (error: any) {
+    const errorMsg = error.message || error.stderr || "";
+    if (errorMsg.includes("cannot connect to 1Password app")) {
+      throw new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app");
+    }
     console.warn("Failed to get session token:", error);
   }
   
@@ -158,17 +168,30 @@ function runOp(command: string, retryWithAuth = true): Promise<string> {
     child.on("close", async (code) => {
       if (code !== 0) {
         const stderrLower = stderr.toLowerCase();
+        
+        if (stderrLower.includes("cannot connect to 1password app") || 
+            stderrLower.includes("make sure it is running")) {
+          reject(new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app"));
+          return;
+        }
+        
         if ((stderrLower.includes("not signed in") || 
             stderrLower.includes("authentication") || 
             stderrLower.includes("you are not signed in") ||
-            stderrLower.includes("sign in required")) && retryWithAuth) {
+            stderrLower.includes("sign in required") ||
+            stderrLower.includes("account is not signed in")) && retryWithAuth) {
           cachedSessionToken = null;
           try {
             const result = await runOp(command, false);
             resolve(result);
             return;
-          } catch (retryError) {
-            reject(new Error("Please sign in to 1Password CLI. Make sure:\n1. 1Password desktop app is open and unlocked\n2. CLI integration is enabled (Settings → Developer)\n3. Try running 'op signin' in PowerShell"));
+          } catch (retryError: any) {
+            const retryErrorMsg = retryError.message || "";
+            if (retryErrorMsg.includes("cannot connect")) {
+              reject(retryError);
+            } else {
+              reject(new Error("Please sign in to 1Password CLI. Make sure:\n1. 1Password desktop app is open and unlocked\n2. CLI integration is enabled (Settings → Developer)\n3. Try running 'op signin' in PowerShell"));
+            }
             return;
           }
         } else if (stderr && !stderr.includes("warning")) {
@@ -276,6 +299,7 @@ export async function generatePassword(options: PasswordGeneratorOptions): Promi
   if (!options.lowercase) flags.push("--no-lowercase");
   if (!options.numbers) flags.push("--no-digits");
   if (!options.symbols) flags.push("--no-symbols");
+  if (options.excludeAmbiguous) flags.push("--exclude-symbols");
   
-  return await runOp(`item generate --category password ${flags.join(" ")}`);
+  return await runOp(`generate password ${flags.join(" ")}`);
 }
