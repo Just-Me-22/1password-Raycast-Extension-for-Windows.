@@ -77,28 +77,43 @@ export default function Setup() {
 
     setIsSigningIn(true);
     try {
-      // Open terminal with sign-in command
-      await signIn(email.trim());
+      // Try automated sign-in
+      const success = await signIn(email.trim());
       
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Terminal opened",
-        message: "Complete sign-in in the terminal window",
-      });
-      
-      setShowSignInForm(false);
-      setAutoChecking(true); // Start auto-checking
-      
-      // Also show instructions
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Tip",
-        message: "We'll automatically detect when you're signed in",
-      });
+      if (success) {
+        // Successfully signed in automatically!
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Successfully signed in!",
+          message: "You're all set to use the extension",
+        });
+        
+        setShowSignInForm(false);
+        setIsSigningIn(false);
+        
+        // Refresh status to show success
+        await checkStatus();
+      } else {
+        // Need interactive sign-in - terminal was opened
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Terminal opened",
+          message: "Complete sign-in in the terminal window",
+        });
+        
+        setShowSignInForm(false);
+        setAutoChecking(true); // Start auto-checking
+        
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Tip",
+          message: "We'll automatically detect when you're signed in",
+        });
+      }
     } catch (error: any) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Failed to open terminal",
+        title: "Sign-in failed",
         message: error.message || "Please try again",
       });
       setIsSigningIn(false);

@@ -170,14 +170,10 @@ export async function generatePassword(options: PasswordGeneratorOptions, sessio
 }
 
 /**
- * Signs in to 1Password CLI
- * Opens a terminal window for interactive authentication
+ * Signs in to 1Password CLI and automatically executes the session token command
+ * Returns true if sign-in was successful, false if interactive sign-in is needed
  */
-/**
- * Signs in to 1Password CLI
- * Opens a terminal window for interactive authentication
- */
-export async function signIn(emailOrAccount?: string): Promise<void> {
+export async function signIn(emailOrAccount?: string): Promise<boolean> {
   try {
     // Build the signin command
     let command = "op signin";
@@ -192,23 +188,112 @@ export async function signIn(emailOrAccount?: string): Promise<void> {
         // Likely a domain/account URL
         command = `op signin --account ${emailOrAccount}`;
       } else {
-        // Try as account
+        // Try as account shorthand
         command = `op signin --account ${emailOrAccount}`;
       }
     }
     
-    // Open a new terminal window and run the sign-in command
-    // For Windows, use cmd.exe with /k to keep window open after command
-    const terminal = spawn("cmd.exe", ["/k", command], {
-      detached: true,
-      stdio: "ignore",
-      shell: true,
+    // Execute the signin command and capture output
+    const { stdout, stderr } = await execAsync(command, {
+      shell: "powershell.exe",
+      maxBuffer: 1024 * 1024, // 1MB buffer
     });
     
-    terminal.unref();
+    // Parse the output to extract the PowerShell command
+    // Format: $env:OP_SESSION_xxx="token"; # comment
+    // We need to extract the full command line before the semicolon
+    const sessionCommandMatch = stdout.match(/(\$env:OP_SESSION_\w+="[^"]+");/);
     
-    // Give it a moment to open
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (sessionCommandMatch && sessionCommandMatch[1]) {
+      const sessionCommand = sessionCommandMatch[1];
+      
+      // Extract the environment variable name and token for process.env
+      const envVarMatch = sessionCommand.match(/\$env:(OP_SESSION_\w+)="([^"]+)"/);
+      
+      if (envVarMatch && envVarMatch[1] && envVarMatch[2]) {
+        const envVarName = envVarMatch[1];
+        const sessionToken = envVarMatch[2];
+        
+        // Set the environment variable in the current process
+        process.env[envVarName] = sessionToken;
+        
+        // Execute the PowerShell command to set it in the PowerShell environment
+        // This makes it available to subsequent op commands run from PowerShell
+        try {
+          // Execute the command using Invoke-Expression as suggested by 1Password
+          await execAsync(
+            `powershell.exe -Command "Invoke-Expression '${sessionCommand}'"`,
+            { shell: "cmd.exe" }
+          );
+        } catch (execError) {
+          // If that fails, try direct execution
+          try {
+            await execAsync(
+              `powershell.exe -Command "${sessionCommand}"`,
+              { shell: "cmd.exe" }
+            );
+          } catch {
+            // If both fail, that's okay - we have it in process.env
+            // The session might still work for this process
+          }
+        }
+      }
+      
+      // Verify we're now signed in
+      const signedIn = await isSignedIn();
+      return signedIn;
+    }
+    
+    // If no session token found, check if there's an error or if we need interactive auth
+    if (stderr && stderr.includes("authentication")) {
+      // Fall back to interactive sign-in
+      return await signInInteractive(emailOrAccount);
+    }
+    
+    // If we get here, sign-in might have succeeded but no token in output
+    // Check if we're now signed in
+    const signedIn = await isSignedIn();
+    if (signedIn) {
+      return true; // Signed in successfully
+    }
+    
+    // Try interactive sign-in as fallback
+    return await signInInteractive(emailOrAccount);
+  } catch (error: any) {
+    // If the error suggests interactive authentication is needed
+    if (error.message?.includes("interactive") || error.message?.includes("QR") || error.code === "ENOENT") {
+      // Fall back to opening terminal for interactive sign-in
+      return await signInInteractive(emailOrAccount);
+    }
+    throw new Error(`Sign-in failed: ${error.message || "Unknown error"}`);
+  }
+}
+
+/**
+ * Opens a terminal window for interactive sign-in (fallback method)
+ * Returns false to indicate user needs to complete sign-in manually
+ */
+async function signInInteractive(emailOrAccount?: string): Promise<boolean> {
+  try {
+    let command = "op signin";
+    
+    if (emailOrAccount) {
+      if (emailOrAccount.includes("@")) {
+        command = `op signin ${emailOrAccount}`;
+      } else {
+        command = `op signin --account ${emailOrAccount}`;
+      }
+    }
+    
+    // Open PowerShell and run the signin command
+    // Use Start-Process to open a new window
+    const psCommand = `Start-Process powershell -ArgumentList "-NoExit", "-Command", "${command}"`;
+    await execAsync(psCommand, { shell: "powershell.exe" });
+    
+    // Wait a bit for the window to open
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    return false; // Return false - user needs to complete in terminal
   } catch (error: any) {
     throw new Error(`Failed to open terminal: ${error.message}`);
   }
