@@ -1,43 +1,46 @@
 # 1Password Extension for Raycast (Windows)
 
-A full-featured 1Password extension for Raycast on Windows that allows you to search, copy, and manage your 1Password items directly from Raycast.
+A 1Password extension for Raycast on Windows that allows you to search, copy, and manage your 1Password items directly from Raycast.
 
 ## Features
 
-- 🔍 **Search Items** - Quickly search and browse all your 1Password items
-- 🔐 **Copy Credentials** - Copy passwords, usernames, and OTP codes with a single keystroke
-- 🎲 **Generate Passwords** - Create secure passwords with customizable options
-- 📦 **Manage Vaults** - View and manage your 1Password vaults
-- ✏️ **View & Edit** - View item details and edit items directly from Raycast
+- **Search Items** – Quickly search and browse your 1Password items
+- **Copy Credentials** – Copy passwords, usernames, and OTP codes with a single action
+- **Generate Passwords** – Create secure passwords with configurable options
+- **Manage Vaults** – View and manage your 1Password vaults
+- **View Details** – Inspect item details from within Raycast
 
 ## Prerequisites
 
-- [Raycast for Windows](https://www.raycast.com/windows) (beta)
-- [1Password CLI](https://developer.1password.com/docs/cli) installed and authenticated
-- Node.js 18+ (for development)
+- [Raycast for Windows](https://www.raycast.com/windows)
+- [1Password CLI](https://developer.1password.com/docs/cli) installed
+- 1Password desktop application installed
+- Node.js 18 or later (for development)
 
 ## Installation
 
-1. Clone this repository
-2. Install dependencies: `npm install`
-3. Add an `icon.png` file (512x512 pixels) to the root directory (see [SETUP.md](SETUP.md))
-4. Build the extension: `npm run build`
-5. Open Raycast and import the extension
+1. Clone this repository.
+2. Install dependencies: `npm install`.
+3. Add an `icon.png` file (512x512 pixels) to the project root (see [SETUP.md](SETUP.md)).
+4. Build the extension: `npm run build`.
+5. Open Raycast and import the extension from the generated `dist` directory.
 
-**Note:** See [SETUP.md](SETUP.md) for detailed setup instructions including GitHub repository creation.
+For more detailed setup instructions, see [SETUP.md](SETUP.md).
 
-## Setup
+## 1Password CLI and Desktop App
 
-1. Install the 1Password CLI:
-   - Download from [1Password Developer Portal](https://developer.1password.com/docs/cli/get-started)
-   - Follow the installation instructions for Windows
+The extension uses the 1Password CLI for all operations. Before using the extension, ensure that:
 
-2. Sign in to 1Password CLI:
+1. The 1Password desktop app is installed, running, and unlocked.
+2. CLI integration is enabled in the desktop app under **Settings → Developer → Integrate with 1Password CLI**.
+3. The following commands work in a PowerShell window:
    ```bash
-   op signin
+   op whoami
+   op vault list --format json
+   op item list --format json | Select-Object -First 5
    ```
 
-3. The extension will automatically detect your 1Password CLI installation and use it to access your items.
+If any of these commands fail, resolve the CLI or desktop app configuration before using the extension.
 
 ## Development
 
@@ -61,10 +64,10 @@ npm run lint
 Search and browse your 1Password items. Filter by vault or category, and quickly copy credentials.
 
 ### Generate Password
-Generate secure passwords with customizable length and character sets.
+Generate secure passwords with configurable length and character sets.
 
 ### Manage Vaults
-View all your 1Password vaults and browse items within each vault.
+List your 1Password vaults and inspect vault details.
 
 ## License
 

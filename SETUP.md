@@ -1,61 +1,78 @@
-# Setup Instructions
+## Project Setup
 
-## GitHub Repository Setup
+This document describes how to set up the project locally and prepare it for use with Raycast on Windows.
 
-Since GitHub CLI is not installed, you'll need to create the repository manually:
+### 1. Prerequisites
 
-1. Go to [GitHub](https://github.com/new)
-2. Create a new repository named `raycast-1password-extension`
-3. **Do NOT** initialize with README, .gitignore, or license (we already have these)
-4. After creating the repository, run these commands:
+- Windows 10 or later  
+- [Raycast for Windows](https://www.raycast.com/windows)  
+- [1Password desktop application](https://1password.com/downloads/windows)  
+- [1Password CLI](https://developer.1password.com/docs/cli/get-started)  
+- Node.js 18 or later  
+- Git
 
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/raycast-1password-extension.git
-git branch -M main
-git push -u origin main
-```
+### 2. Clone and Install
 
-Replace `YOUR_USERNAME` with your GitHub username.
-
-## Icon Setup
-
-Raycast extensions require an `icon.png` file (512x512 pixels recommended). 
-
-You can:
-1. Create your own icon (1Password-themed)
-2. Use a 1Password logo (ensure you have permission)
-3. Use a simple placeholder icon
-
-To add an icon:
-- Place a PNG file named `icon.png` in the root directory
-- Recommended size: 512x512 pixels
-- The icon will be displayed in Raycast's extension list
-
-## Development Setup
-
-1. Make sure you have:
-   - Node.js 18+ installed
-   - 1Password CLI installed and authenticated (`op signin`)
-   - Raycast for Windows installed
-
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Just-Me-22/1password-Raycast-Extension-for-Windows..git
+   cd "1password-Raycast-Extension-for-Windows."
+   ```
 2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. Build the extension:
+### 3. Icon Setup
+
+Raycast extensions require an `icon.png` file in the project root.
+
+- File name: `icon.png`  
+- Recommended size: 512x512 pixels  
+- Format: PNG
+
+Add your icon file before building the extension.
+
+### 4. 1Password CLI and Desktop App Configuration
+
+1. Install and open the 1Password desktop app.
+2. Unlock your account.
+3. Enable CLI integration:
+   - Open the 1Password app.
+   - Go to **Settings → Developer**.
+   - Enable **Integrate with 1Password CLI**.
+4. Verify that the CLI can communicate with 1Password by running these commands in PowerShell:
    ```bash
-   npm run build
+   op whoami
+   op vault list --format json
+   op item list --format json | Select-Object -First 5
    ```
+   All three commands should succeed before using the Raycast extension.
 
-4. Open Raycast and import the extension from the `dist` folder
+### 5. Build the Extension
 
-## Testing
+To build the extension for use in Raycast:
 
-Run in development mode:
+```bash
+npm run build
+```
+
+The compiled extension will be output to the `dist` directory.
+
+### 6. Import into Raycast
+
+1. Open Raycast for Windows.
+2. Open the Extensions view.
+3. Choose to import an extension from a local directory.
+4. Select the compiled extension from the `dist` folder.
+
+### 7. Development Workflow
+
+For iterative development, you can run:
+
 ```bash
 npm run dev
 ```
 
-This will watch for changes and reload the extension automatically.
+This will watch for changes and rebuild the extension as you work.
 
