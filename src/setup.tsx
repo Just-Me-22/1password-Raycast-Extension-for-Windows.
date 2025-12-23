@@ -17,13 +17,33 @@ export default function Setup() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [showSignInForm, setShowSignInForm] = useState(false);
-  const [account, setAccount] = useState("");
-  const [shorthand, setShorthand] = useState("");
+  const [email, setEmail] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [autoChecking, setAutoChecking] = useState(false);
 
   useEffect(() => {
     checkStatus();
   }, []);
+
+  // Auto-check status every 3 seconds if user is signing in
+  useEffect(() => {
+    if (autoChecking) {
+      const interval = setInterval(async () => {
+        const signedIn = await isSignedIn();
+        setIsAuthenticated(signedIn);
+        if (signedIn) {
+          setAutoChecking(false);
+          await showToast({
+            style: Toast.Style.Success,
+            title: "Successfully signed in!",
+            message: "You're all set to use the extension",
+          });
+        }
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }
+  }, [autoChecking]);
 
   async function checkStatus() {
     setIsChecking(true);
@@ -46,23 +66,41 @@ export default function Setup() {
   }
 
   async function handleSignIn() {
+    if (!email.trim()) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Email required",
+        message: "Please enter your email address",
+      });
+      return;
+    }
+
     setIsSigningIn(true);
     try {
-      await signIn(account || undefined, shorthand || undefined);
+      // Open terminal with sign-in command
+      await signIn(email.trim());
+      
       await showToast({
         style: Toast.Style.Success,
         title: "Terminal opened",
-        message: "Complete authentication in the terminal window, then refresh status",
+        message: "Complete sign-in in the terminal window",
       });
+      
       setShowSignInForm(false);
-      // Don't auto-check, let user refresh manually after signing in
+      setAutoChecking(true); // Start auto-checking
+      
+      // Also show instructions
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Tip",
+        message: "We'll automatically detect when you're signed in",
+      });
     } catch (error: any) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Failed to open terminal",
-        message: error.message || "Please try signing in manually",
+        message: error.message || "Please try again",
       });
-    } finally {
       setIsSigningIn(false);
     }
   }
@@ -70,7 +108,7 @@ export default function Setup() {
   if (isChecking) {
     return (
       <Detail
-        markdown="# Checking Setup Status...\n\nPlease wait while we verify your 1Password CLI installation."
+        markdown="# Checking Setup...\n\nPlease wait a moment."
         isLoading={true}
       />
     );
@@ -91,45 +129,42 @@ export default function Setup() {
               title="Cancel"
               icon={Icon.XMarkCircle}
               shortcut={{ modifiers: ["ctrl"], key: "escape" }}
-              onAction={() => setShowSignInForm(false)}
+              onAction={() => {
+                setShowSignInForm(false);
+                setIsSigningIn(false);
+              }}
             />
           </ActionPanel>
         }
       >
         <Form.Description
           title="Sign In to 1Password"
-          text="Enter your 1Password account details to sign in. A terminal window will open for authentication."
+          text="Enter your email address. A terminal window will open where you can complete sign-in."
         />
         <Form.TextField
-          id="account"
-          title="Account URL or Email"
-          placeholder="myaccount.1password.com or email@example.com"
-          value={account}
-          onChange={setAccount}
-          info="Your 1Password account URL (e.g., myaccount.1password.com) or email address"
-        />
-        <Form.TextField
-          id="shorthand"
-          title="Shorthand (Optional)"
-          placeholder="myaccount"
-          value={shorthand}
-          onChange={setShorthand}
-          info="A short name for this account (optional)"
+          id="email"
+          title="Email Address"
+          placeholder="you@example.com"
+          value={email}
+          onChange={setEmail}
+          autoFocus
+          info="Your 1Password account email address"
         />
         {isSigningIn && (
-          <Form.Description title="Status" text="Signing in... Please complete authentication in the terminal." />
+          <Form.Description 
+            title="Status" 
+            text="Opening terminal... Complete the sign-in process in the terminal window. We'll automatically detect when you're done!" 
+          />
         )}
       </Form>
     );
   }
 
-  const markdown = `# 1Password Extension Setup
-
-## Status Check
+  const markdown = `# Welcome to 1Password Extension! 🔐
 
 ${getStatusMarkdown(isInstalled, isAuthenticated)}
 
-${getInstructionsMarkdown(isInstalled, isAuthenticated)}
+${getInstructionsMarkdown(isInstalled, isAuthenticated, autoChecking)}
 `;
 
   return (
@@ -139,7 +174,7 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated)}
         <ActionPanel>
           {!isInstalled && (
             <Action
-              title="Open 1Password CLI Installation Guide"
+              title="Open Installation Guide"
               icon={Icon.Link}
               onAction={() => open("https://developer.1password.com/docs/cli/get-started")}
             />
@@ -147,44 +182,23 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated)}
           {isInstalled && !isAuthenticated && (
             <>
               <Action
-                title="Sign In to 1Password"
+                title="Sign In (Just Enter Email)"
                 icon={Icon.Lock}
                 shortcut={{ modifiers: ["ctrl"], key: "s" }}
                 onAction={() => setShowSignInForm(true)}
               />
+              {autoChecking && (
+                <Action
+                  title="Stop Auto-Checking"
+                  icon={Icon.Stop}
+                  onAction={() => setAutoChecking(false)}
+                />
+              )}
               <Action
-                title="Open Terminal to Sign In Manually"
-                icon={Icon.Terminal}
-                shortcut={{ modifiers: ["ctrl"], key: "t" }}
-                onAction={async () => {
-                  try {
-                    await open("cmd.exe");
-                    await showToast({
-                      style: Toast.Style.Success,
-                      title: "Terminal opened",
-                      message: "Run 'op signin' in the terminal",
-                    });
-                  } catch (error) {
-                    await showToast({
-                      style: Toast.Style.Failure,
-                      title: "Could not open terminal",
-                      message: "Please open a terminal manually",
-                    });
-                  }
-                }}
-              />
-              <Action
-                title="Copy Sign In Command"
-                icon={Icon.Clipboard}
-                shortcut={{ modifiers: ["ctrl"], key: "c" }}
-                onAction={async () => {
-                  await Clipboard.copy("op signin");
-                  await showToast({
-                    style: Toast.Style.Success,
-                    title: "Command copied",
-                    message: "Paste 'op signin' in your terminal",
-                  });
-                }}
+                title="Refresh Status"
+                icon={Icon.ArrowClockwise}
+                shortcut={{ modifiers: ["ctrl"], key: "r" }}
+                onAction={checkStatus}
               />
             </>
           )}
@@ -196,11 +210,6 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated)}
               onAction={checkStatus}
             />
           )}
-          <Action
-            title="Check Status Again"
-            icon={Icon.ArrowClockwise}
-            onAction={checkStatus}
-          />
         </ActionPanel>
       }
     />
@@ -209,73 +218,66 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated)}
 
 function getStatusMarkdown(isInstalled: boolean | null, isAuthenticated: boolean | null): string {
   if (!isInstalled) {
-    return `❌ **1Password CLI is not installed**
+    return `## ❌ 1Password CLI Not Installed
 
-You need to install the 1Password CLI before using this extension.`;
+Don't worry! It only takes a minute to install.`;
   }
 
   if (!isAuthenticated) {
-    return `✅ **1Password CLI is installed**\n❌ **Not signed in**
+    return `## ✅ CLI Installed | ❌ Not Signed In
 
-You need to sign in to your 1Password account.`;
+Ready to sign in? It's super easy!`;
   }
 
-  return `✅ **1Password CLI is installed**\n✅ **Signed in**
+  return `## ✅ All Set!
 
-You're all set! You can now use all the extension commands.`;
+You're ready to use the extension!`;
 }
 
-function getInstructionsMarkdown(isInstalled: boolean | null, isAuthenticated: boolean | null): string {
+function getInstructionsMarkdown(
+  isInstalled: boolean | null,
+  isAuthenticated: boolean | null,
+  autoChecking: boolean
+): string {
   if (!isInstalled) {
-    return `## Installation Steps
+    return `### Quick Setup (2 minutes)
 
-1. **Download 1Password CLI**
-   - Visit: https://developer.1password.com/docs/cli/get-started
-   - Download the Windows installer
-   - Run the installer and follow the setup instructions
+1. **Click the button below** to open the installation guide
+2. **Download** the Windows installer
+3. **Run** the installer (it's quick!)
+4. **Come back here** and we'll help you sign in
 
-2. **Verify Installation**
-   - Open a terminal (PowerShell or Command Prompt)
-   - Run: \`op --version\`
-   - You should see a version number
-
-3. **Sign In**
-   - Press \`Ctrl+S\` or click "Sign In to 1Password" button above
-   - Or run: \`op signin\` in terminal
-
-4. **Return Here**
-   - Press \`Ctrl+R\` or click "Check Status Again" to verify setup`;
+That's it! 🎉`;
   }
 
   if (!isAuthenticated) {
-    return `## Sign In Steps
+    if (autoChecking) {
+      return `### Sign-In in Progress
 
-1. **Automated Sign In (Recommended)**
-   - Press \`Ctrl+S\` or click "Sign In to 1Password" button above
-   - Enter your account URL or email
-   - A terminal window will open for authentication
-   - Follow the prompts (scan QR code or enter password)
+1. **Terminal window opened** - Complete sign-in there
+2. **We're checking automatically** - No need to refresh!
+3. **When done**, you'll see a success message
 
-2. **Manual Sign In**
-   - Press \`Ctrl+T\` to open terminal
-   - Run: \`op signin\`
-   - Follow the authentication prompts
+**Tip:** If you have the 1Password app open, sign-in will be instant!`;
+    }
 
-3. **Verify Sign In**
-   - Run: \`op whoami\` to confirm you're signed in
-   - You should see your account email
+    return `### Easy Sign-In (30 seconds)
 
-4. **Return Here**
-   - Press \`Ctrl+R\` or click "Check Status Again" to refresh`;
+1. **Click "Sign In"** button above (or press \`Ctrl+S\`)
+2. **Enter your email** address
+3. **Terminal opens automatically** - just follow the prompts
+4. **We'll detect** when you're done automatically!
+
+**That's it!** No complicated steps. 🚀`;
   }
 
-  return `## You're Ready!
+  return `### You're Ready to Go!
 
-All setup is complete. You can now use:
+Try these commands:
 
-- **Search Items** - Search and browse your 1Password items
+- **Search Items** - Find and copy passwords instantly
 - **Generate Password** - Create secure passwords
-- **Manage Vaults** - View and manage your vaults
+- **Manage Vaults** - Browse your vaults
 
-Enjoy using the extension! 🎉`;
+Enjoy! 🎉`;
 }

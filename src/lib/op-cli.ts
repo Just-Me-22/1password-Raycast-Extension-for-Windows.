@@ -177,11 +177,25 @@ export async function generatePassword(options: PasswordGeneratorOptions, sessio
  * Signs in to 1Password CLI
  * Opens a terminal window for interactive authentication
  */
-export async function signIn(account?: string, shorthand?: string): Promise<void> {
+export async function signIn(emailOrAccount?: string): Promise<void> {
   try {
-    const accountFlag = account ? `--account ${account}` : "";
-    const shorthandFlag = shorthand ? `--shorthand ${shorthand}` : "";
-    const command = `op signin ${accountFlag} ${shorthandFlag}`.trim();
+    // Build the signin command
+    let command = "op signin";
+    
+    if (emailOrAccount) {
+      // If it looks like an email, use it directly
+      // If it looks like a domain, use --account flag
+      if (emailOrAccount.includes("@")) {
+        // Email address - 1Password CLI can use this directly
+        command = `op signin ${emailOrAccount}`;
+      } else if (emailOrAccount.includes(".")) {
+        // Likely a domain/account URL
+        command = `op signin --account ${emailOrAccount}`;
+      } else {
+        // Try as account
+        command = `op signin --account ${emailOrAccount}`;
+      }
+    }
     
     // Open a new terminal window and run the sign-in command
     // For Windows, use cmd.exe with /k to keep window open after command
@@ -196,7 +210,7 @@ export async function signIn(account?: string, shorthand?: string): Promise<void
     // Give it a moment to open
     await new Promise((resolve) => setTimeout(resolve, 500));
   } catch (error: any) {
-    throw new Error(`Failed to initiate sign in: ${error.message}`);
+    throw new Error(`Failed to open terminal: ${error.message}`);
   }
 }
 
