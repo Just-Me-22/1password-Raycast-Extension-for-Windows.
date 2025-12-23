@@ -1,13 +1,9 @@
-import { spawn, exec } from "child_process";
+import { spawn } from "child_process";
 import { existsSync, readdirSync } from "fs";
 import path from "path";
-import { promisify } from "util";
 import { OnePasswordItem, OnePasswordVault, PasswordGeneratorOptions } from "./types";
 
-const execAsync = promisify(exec);
-
 let cachedOpPath: string | null = null;
-let cachedSessionToken: { name: string; value: string } | null = null;
 
 // Find op.exe in common Windows locations
 async function findOpPath(): Promise<string> {
@@ -47,72 +43,10 @@ async function findOpPath(): Promise<string> {
   return cachedOpPath;
 }
 
-
-async function getSessionToken(): Promise<{ name: string; value: string } | null> {
-  if (cachedSessionToken) {
-    return cachedSessionToken;
-  }
-
-  try {
-    const opCmd = await findOpPath();
-    const command = opCmd.includes(" ") ? `& "${opCmd}"` : opCmd;
-    
-    const { stdout, stderr } = await execAsync(
-      `powershell.exe -NoProfile -WindowStyle Hidden -Command "${command} signin --raw"`,
-      {
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-        timeout: 20000,
-      }
-    );
-    
-    const token = stdout.trim();
-    const errorOutput = stderr?.trim() || "";
-    
-    if (errorOutput.includes("cannot connect to 1Password app")) {
-      throw new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app");
-    }
-    
-    if (token && token.length > 20 && !token.includes("$env:") && !token.includes("ERROR")) {
-      try {
-        const accountOutput = await execAsync(
-          `powershell.exe -NoProfile -WindowStyle Hidden -Command "${command} account list --format json"`,
-          {
-            windowsHide: true,
-            maxBuffer: 1024 * 1024,
-            timeout: 5000,
-          }
-        );
-        
-        const accounts = JSON.parse(accountOutput.stdout.trim());
-        if (accounts && accounts.length > 0) {
-          const account = accounts[0];
-          const envVarName = `OP_SESSION_${account.user_uuid || account.shorthand || "default"}`;
-          cachedSessionToken = { name: envVarName, value: token };
-          process.env[envVarName] = token;
-          return cachedSessionToken;
-        }
-      } catch {
-        const envVarName = `OP_SESSION_default`;
-        cachedSessionToken = { name: envVarName, value: token };
-        process.env[envVarName] = token;
-        return cachedSessionToken;
-      }
-    }
-  } catch (error: any) {
-    const errorMsg = error.message || error.stderr || "";
-    if (errorMsg.includes("cannot connect to 1Password app")) {
-      throw new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app");
-    }
-    console.warn("Failed to get session token:", error);
-  }
-  
-  return null;
-}
-
-function runOp(command: string, retryWithAuth = true): Promise<string> {
-  return new Promise(async (resolve, reject) => {
-    const opCmd = await findOpPath();
+function runOp(command: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    findOpPath()
+      .then((opCmd) => {
     
     const args: string[] = [];
     let currentArg = "";
@@ -133,86 +67,83 @@ function runOp(command: string, retryWithAuth = true): Promise<string> {
       }
     }
     
-    if (currentArg.length > 0) {
-      args.push(currentArg);
-    }
-    
-    const env = { ...process.env };
-    const sessionInfo = await getSessionToken();
-    if (sessionInfo) {
-      env[sessionInfo.name] = sessionInfo.value;
-    }
-    
-    const child = spawn(opCmd, args, {
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: false,
-      env: env,
-    });
+        if (currentArg.length > 0) {
+          args.push(currentArg);
+        }
+
+        const child = spawn(opCmd, args, {
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+          shell: false,
+          env: process.env,
+        });
     
     let stdout = "";
     let stderr = "";
     
-    child.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
-    
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-    
-    child.on("error", (error) => {
-      reject(new Error(`Failed to execute op command: ${error.message}`));
-    });
-    
-    child.on("close", async (code) => {
-      if (code !== 0) {
-        const stderrLower = stderr.toLowerCase();
-        
-        if (stderrLower.includes("cannot connect to 1password app") || 
-            stderrLower.includes("make sure it is running")) {
-          reject(new Error("Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app"));
-          return;
-        }
-        
-        if ((stderrLower.includes("not signed in") || 
-            stderrLower.includes("authentication") || 
-            stderrLower.includes("you are not signed in") ||
-            stderrLower.includes("sign in required") ||
-            stderrLower.includes("account is not signed in")) && retryWithAuth) {
-          cachedSessionToken = null;
-          try {
-            const result = await runOp(command, false);
-            resolve(result);
-            return;
-          } catch (retryError: any) {
-            const retryErrorMsg = retryError.message || "";
-            if (retryErrorMsg.includes("cannot connect")) {
-              reject(retryError);
+        child.stdout?.on("data", (data) => {
+          stdout += data.toString();
+        });
+
+        child.stderr?.on("data", (data) => {
+          stderr += data.toString();
+        });
+
+        child.on("error", (error) => {
+          reject(new Error(`Failed to execute op command: ${error.message}`));
+        });
+
+        child.on("close", (code) => {
+          if (code !== 0) {
+            const stderrLower = stderr.toLowerCase();
+
+            if (stderrLower.includes("cannot connect to 1password app") || stderrLower.includes("make sure it is running")) {
+              reject(
+                new Error(
+                  "Cannot connect to 1Password desktop app. Please ensure:\n1. 1Password app is running and unlocked\n2. CLI integration is enabled: Settings → Developer → 'Integrate with 1Password CLI'\n3. Try restarting the 1Password app"
+                )
+              );
+              return;
+            }
+
+            if (
+              stderrLower.includes("not signed in") ||
+              stderrLower.includes("authentication") ||
+              stderrLower.includes("you are not signed in") ||
+              stderrLower.includes("sign in required") ||
+              stderrLower.includes("account is not signed in")
+            ) {
+              reject(
+                new Error(
+                  "Please sign in to 1Password CLI. Make sure:\n1. 1Password desktop app is open and unlocked\n2. CLI integration is enabled (Settings → Developer)\n3. Try running 'op signin' in PowerShell"
+                )
+              );
+              return;
+            }
+
+            if (stderr && !stderr.includes("warning")) {
+              reject(new Error(stderr || `Command failed with exit code ${code}`));
             } else {
-              reject(new Error("Please sign in to 1Password CLI. Make sure:\n1. 1Password desktop app is open and unlocked\n2. CLI integration is enabled (Settings → Developer)\n3. Try running 'op signin' in PowerShell"));
+              reject(new Error(`Command failed with exit code ${code}. ${stderr || ""}`));
             }
             return;
           }
-        } else if (stderr && !stderr.includes("warning")) {
-          reject(new Error(stderr || `Command failed with exit code ${code}`));
-        } else {
-          reject(new Error(`Command failed with exit code ${code}. ${stderr || ""}`));
-        }
-        return;
-      }
-      
-      if (stderr && !stderr.includes("warning") && stderr.trim().length > 0) {
-        console.warn("Stderr output:", stderr);
-      }
-      
-      resolve(stdout.trim());
-    });
-    
-    setTimeout(() => {
-      child.kill();
-      reject(new Error("Command timeout after 30 seconds"));
-    }, 30000);
+
+          if (stderr && !stderr.includes("warning") && stderr.trim().length > 0) {
+            console.warn("Stderr output:", stderr);
+          }
+
+          resolve(stdout.trim());
+        });
+
+        setTimeout(() => {
+          child.kill();
+          reject(new Error("Command timeout after 30 seconds"));
+        }, 30000);
+      })
+      .catch((error) => {
+        reject(error);
+      });
   });
 }
 
@@ -302,4 +233,73 @@ export async function generatePassword(options: PasswordGeneratorOptions): Promi
   if (options.excludeAmbiguous) flags.push("--exclude-symbols");
   
   return await runOp(`generate password ${flags.join(" ")}`);
+}
+
+interface LoginItemInput {
+  title: string;
+  vaultId?: string;
+  username?: string;
+  password?: string;
+  url?: string;
+  notes?: string;
+}
+
+interface EditLoginItemInput extends LoginItemInput {
+  id: string;
+}
+
+export async function createLoginItem(input: LoginItemInput): Promise<OnePasswordItem> {
+  const parts: string[] = ['item create "Login"'];
+
+  if (input.title) {
+    parts.push(`--title "${input.title}"`);
+  }
+  if (input.vaultId) {
+    parts.push(`--vault "${input.vaultId}"`);
+  }
+  if (input.username) {
+    parts.push(`--username "${input.username}"`);
+  }
+  if (input.password) {
+    parts.push(`--password "${input.password}"`);
+  }
+  if (input.url) {
+    parts.push(`--url "${input.url}"`);
+  }
+  if (input.notes) {
+    parts.push(`--notes "${input.notes}"`);
+  }
+
+  parts.push("--format json");
+
+  const output = await runOp(parts.join(" "));
+  return JSON.parse(output) as OnePasswordItem;
+}
+
+export async function editLoginItem(input: EditLoginItemInput): Promise<OnePasswordItem> {
+  const parts: string[] = ["item edit", input.id];
+
+  if (input.title) {
+    parts.push(`--title "${input.title}"`);
+  }
+  if (input.vaultId) {
+    parts.push(`--vault "${input.vaultId}"`);
+  }
+  if (input.username) {
+    parts.push(`--username "${input.username}"`);
+  }
+  if (input.password) {
+    parts.push(`--password "${input.password}"`);
+  }
+  if (input.url) {
+    parts.push(`--url "${input.url}"`);
+  }
+  if (input.notes) {
+    parts.push(`--notes "${input.notes}"`);
+  }
+
+  parts.push("--format json");
+
+  const output = await runOp(parts.join(" "));
+  return JSON.parse(output) as OnePasswordItem;
 }

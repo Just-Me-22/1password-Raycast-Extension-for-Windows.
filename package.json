@@ -34,6 +34,12 @@
       "title": "Manage Vaults",
       "description": "View and manage your 1Password vaults",
       "mode": "view"
+    },
+    {
+      "name": "new-login-item",
+      "title": "New Login Item",
+      "description": "Create a new 1Password login item",
+      "mode": "view"
     }
   ],
   "dependencies": {

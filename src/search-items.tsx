@@ -1,18 +1,7 @@
 import { useState, useEffect } from "react";
-import {
-  List,
-  ActionPanel,
-  Action,
-  Icon,
-  showToast,
-  Toast,
-  getPreferenceValues,
-  Detail,
-  useNavigation,
-  Clipboard,
-} from "@raycast/api";
-import { listItems, isOPInstalled, isSignedIn, getPassword, getUsername, getField } from "./lib/op-cli";
-import { searchItems, getCategoryIcon, formatDate, getFieldByLabel as getFieldUtil, getOTPField } from "./lib/utils";
+import { List, ActionPanel, Action, Icon, showToast, Toast, getPreferenceValues, Detail, useNavigation, Clipboard, open, Form } from "@raycast/api";
+import { listItems, isOPInstalled, isSignedIn, getPassword, getUsername, getField, editLoginItem } from "./lib/op-cli";
+import { searchItems, getCategoryIcon, formatDate, getFieldByLabel as getFieldUtil, getOTPField, getFieldByPurpose } from "./lib/utils";
 import { getCachedItems, setCachedItems } from "./lib/cache";
 import { OnePasswordItem } from "./lib/types";
 
@@ -229,6 +218,25 @@ export default function SearchItems() {
                     onAction={() => push(<ItemDetailView item={item} />)}
                   />
                   <Action
+                    title="Edit Item (Login only)"
+                    icon={Icon.Pencil}
+                    shortcut={{ modifiers: ["ctrl"], key: "e" }}
+                    onAction={() => push(<EditItemForm item={item} onUpdated={loadItems} />)}
+                  />
+                  <Action
+                    title="Open in Browser"
+                    icon={Icon.Globe}
+                    shortcut={{ modifiers: ["ctrl"], key: "o" }}
+                    onAction={() => {
+                      const url = item.urls && item.urls.length > 0 ? item.urls[0].href : undefined;
+                      if (url) {
+                        open(url);
+                      } else {
+                        showToast({ style: Toast.Style.Failure, title: "No URL on item" });
+                      }
+                    }}
+                  />
+                  <Action
                     title="Refresh"
                     icon={Icon.ArrowClockwise}
                     shortcut={{ modifiers: ["ctrl"], key: "r" }}
@@ -262,6 +270,79 @@ function ItemDetailView({ item }: { item: OnePasswordItem }) {
         </ActionPanel>
       }
     />
+  );
+}
+
+function EditItemForm({ item, onUpdated }: { item: OnePasswordItem; onUpdated: () => void }) {
+  const { pop } = useNavigation();
+
+  const initialUsername =
+    getFieldByPurpose(item, "username") ||
+    getFieldUtil(item, "username") ||
+    getFieldUtil(item, "user name") ||
+    "";
+
+  const initialPassword =
+    getFieldByPurpose(item, "password") ||
+    getFieldUtil(item, "password") ||
+    "";
+
+  const initialUrl = item.urls && item.urls.length > 0 ? item.urls[0].href : "";
+
+  async function handleSubmit(values: {
+    title: string;
+    username?: string;
+    password?: string;
+    url?: string;
+    notes?: string;
+  }) {
+    if (item.category.toLowerCase() !== "login") {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Editing supported for Login items only",
+      });
+      return;
+    }
+
+    try {
+      await showToast({ style: Toast.Style.Animated, title: "Saving changes..." });
+
+      await editLoginItem({
+        id: item.id,
+        title: values.title,
+        username: values.username,
+        password: values.password,
+        url: values.url,
+        notes: values.notes,
+        vaultId: item.vault.id,
+      });
+
+      await showToast({ style: Toast.Style.Success, title: "Item updated" });
+      onUpdated();
+      pop();
+    } catch (error: any) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to update item",
+        message: error.message || "Check 1Password CLI configuration.",
+      });
+    }
+  }
+
+  return (
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Save Changes" icon={Icon.Check} onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField id="title" title="Title" defaultValue={item.title} />
+      <Form.TextField id="username" title="Username" defaultValue={initialUsername} />
+      <Form.PasswordField id="password" title="Password" defaultValue={initialPassword} />
+      <Form.TextField id="url" title="URL" defaultValue={initialUrl} />
+      <Form.TextArea id="notes" title="Notes" defaultValue={item.notesPlain || ""} />
+    </Form>
   );
 }
 
