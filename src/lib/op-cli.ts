@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import { OnePasswordItem, OnePasswordVault, PasswordGeneratorOptions, OPCLIError } from "./types";
 
@@ -170,27 +170,33 @@ export async function generatePassword(options: PasswordGeneratorOptions, sessio
 }
 
 /**
- * Signs in to 1Password CLI (returns session token)
+ * Signs in to 1Password CLI
+ * Opens a terminal window for interactive authentication
  */
-export async function signIn(account?: string, shorthand?: string): Promise<string> {
+/**
+ * Signs in to 1Password CLI
+ * Opens a terminal window for interactive authentication
+ */
+export async function signIn(account?: string, shorthand?: string): Promise<void> {
   try {
     const accountFlag = account ? `--account ${account}` : "";
     const shorthandFlag = shorthand ? `--shorthand ${shorthand}` : "";
-    const command = `signin ${accountFlag} ${shorthandFlag}`.trim();
+    const command = `op signin ${accountFlag} ${shorthandFlag}`.trim();
     
-    // Note: This will prompt for password, which may not work in non-interactive mode
-    // In practice, users should sign in manually via terminal
-    const output = await executeOPCommand(command);
+    // Open a new terminal window and run the sign-in command
+    // For Windows, use cmd.exe with /k to keep window open after command
+    const terminal = spawn("cmd.exe", ["/k", command], {
+      detached: true,
+      stdio: "ignore",
+      shell: true,
+    });
     
-    // Extract session token from output if available
-    const match = output.match(/OP_SESSION_(\w+)=([^\s]+)/);
-    if (match) {
-      return match[2];
-    }
+    terminal.unref();
     
-    return "";
+    // Give it a moment to open
+    await new Promise((resolve) => setTimeout(resolve, 500));
   } catch (error: any) {
-    throw new Error(`Failed to sign in: ${error.message}`);
+    throw new Error(`Failed to initiate sign in: ${error.message}`);
   }
 }
 

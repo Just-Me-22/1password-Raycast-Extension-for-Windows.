@@ -105,7 +105,7 @@ export default function GeneratePassword() {
             <Action
               title="Copy Password"
               icon={Icon.Clipboard}
-              shortcut={{ modifiers: ["cmd"], key: "c" }}
+              shortcut={{ modifiers: ["ctrl"], key: "c" }}
               onAction={handleCopy}
             />
           )}

@@ -205,19 +205,19 @@ export default function SearchItems() {
                   <Action
                     title="Copy Password"
                     icon={Icon.Lock}
-                    shortcut={{ modifiers: ["cmd"], key: "p" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "p" }}
                     onAction={() => handleCopyPassword(item)}
                   />
                   <Action
                     title="Copy Username"
                     icon={Icon.Person}
-                    shortcut={{ modifiers: ["cmd"], key: "u" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "u" }}
                     onAction={() => handleCopyUsername(item)}
                   />
                   <Action
                     title="Copy OTP"
                     icon={Icon.Key}
-                    shortcut={{ modifiers: ["cmd"], key: "o" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "o" }}
                     onAction={() => handleCopyOTP(item)}
                   />
                 </ActionPanel.Section>
@@ -225,13 +225,13 @@ export default function SearchItems() {
                   <Action
                     title="View Details"
                     icon={Icon.Eye}
-                    shortcut={{ modifiers: ["cmd"], key: "enter" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "enter" }}
                     onAction={() => push(<ItemDetailView item={item} />)}
                   />
                   <Action
                     title="Refresh"
                     icon={Icon.ArrowClockwise}
-                    shortcut={{ modifiers: ["cmd"], key: "r" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "r" }}
                     onAction={loadItems}
                   />
                 </ActionPanel.Section>

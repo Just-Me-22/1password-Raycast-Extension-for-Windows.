@@ -109,7 +109,7 @@ export default function ManageVaults() {
                   <Action
                     title="Browse Items"
                     icon={Icon.List}
-                    shortcut={{ modifiers: ["cmd"], key: "enter" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "enter" }}
                     onAction={() => {
                       // Navigate to items in this vault
                       showToast({
@@ -132,7 +132,7 @@ export default function ManageVaults() {
                   <Action
                     title="Refresh"
                     icon={Icon.ArrowClockwise}
-                    shortcut={{ modifiers: ["cmd"], key: "r" }}
+                    shortcut={{ modifiers: ["ctrl"], key: "r" }}
                     onAction={loadVaults}
                   />
                 </ActionPanel.Section>
