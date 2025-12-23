@@ -12,6 +12,12 @@
   "license": "MIT",
   "commands": [
     {
+      "name": "setup",
+      "title": "Setup & Sign In",
+      "description": "Check setup status and sign in to 1Password CLI",
+      "mode": "view"
+    },
+    {
       "name": "search-items",
       "title": "Search Items",
       "description": "Search and browse your 1Password items",

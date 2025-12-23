@@ -13,6 +13,8 @@ type ExtensionPreferences = {}
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
+  /** Preferences accessible in the `setup` command */
+  export type Setup = ExtensionPreferences & {}
   /** Preferences accessible in the `search-items` command */
   export type SearchItems = ExtensionPreferences & {}
   /** Preferences accessible in the `generate-password` command */
@@ -22,6 +24,8 @@ declare namespace Preferences {
 }
 
 declare namespace Arguments {
+  /** Arguments passed to the `setup` command */
+  export type Setup = {}
   /** Arguments passed to the `search-items` command */
   export type SearchItems = {}
   /** Arguments passed to the `generate-password` command */
