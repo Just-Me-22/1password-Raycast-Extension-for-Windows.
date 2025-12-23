@@ -20,8 +20,11 @@ A full-featured 1Password extension for Raycast on Windows that allows you to se
 
 1. Clone this repository
 2. Install dependencies: `npm install`
-3. Build the extension: `npm run build`
-4. Open Raycast and import the extension
+3. Add an `icon.png` file (512x512 pixels) to the root directory (see [SETUP.md](SETUP.md))
+4. Build the extension: `npm run build`
+5. Open Raycast and import the extension
+
+**Note:** See [SETUP.md](SETUP.md) for detailed setup instructions including GitHub repository creation.
 
 ## Setup
 

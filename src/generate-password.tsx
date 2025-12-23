@@ -8,8 +8,8 @@ import {
   Toast,
   Clipboard,
 } from "@raycast/api";
-import { generatePassword, isOPInstalled, isSignedIn } from "../lib/op-cli";
-import { PasswordGeneratorOptions } from "../lib/types";
+import { generatePassword, isOPInstalled, isSignedIn } from "./lib/op-cli";
+import { PasswordGeneratorOptions } from "./lib/types";
 
 export default function GeneratePassword() {
   const [generatedPassword, setGeneratedPassword] = useState<string>("");

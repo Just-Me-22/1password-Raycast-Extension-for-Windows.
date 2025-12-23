@@ -8,10 +8,10 @@ import {
   Toast,
   Detail,
 } from "@raycast/api";
-import { listVaults, listItemsInVault, isOPInstalled, isSignedIn } from "../lib/op-cli";
-import { getCachedVaults, setCachedVaults } from "../lib/cache";
-import { OnePasswordVault, OnePasswordItem } from "../lib/types";
-import { getCategoryIcon } from "../lib/utils";
+import { listVaults, listItemsInVault, isOPInstalled, isSignedIn } from "./lib/op-cli";
+import { getCachedVaults, setCachedVaults } from "./lib/cache";
+import { OnePasswordVault, OnePasswordItem } from "./lib/types";
+import { getCategoryIcon } from "./lib/utils";
 
 export default function ManageVaults() {
   const [vaults, setVaults] = useState<OnePasswordVault[]>([]);

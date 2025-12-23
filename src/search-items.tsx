@@ -11,10 +11,10 @@ import {
   useNavigation,
   Clipboard,
 } from "@raycast/api";
-import { listItems, isOPInstalled, isSignedIn, getPassword, getUsername, getField, getOTPField } from "../lib/op-cli";
-import { searchItems, getCategoryIcon, formatDate, getFieldByLabel as getFieldUtil } from "../lib/utils";
-import { getCachedItems, setCachedItems } from "../lib/cache";
-import { OnePasswordItem } from "../lib/types";
+import { listItems, isOPInstalled, isSignedIn, getPassword, getUsername, getField } from "./lib/op-cli";
+import { searchItems, getCategoryIcon, formatDate, getFieldByLabel as getFieldUtil, getOTPField } from "./lib/utils";
+import { getCachedItems, setCachedItems } from "./lib/cache";
+import { OnePasswordItem } from "./lib/types";
 
 export default function SearchItems() {
   const [items, setItems] = useState<OnePasswordItem[]>([]);
@@ -247,7 +247,7 @@ export default function SearchItems() {
 function ItemDetailView({ item }: { item: OnePasswordItem }) {
   return (
     <Detail
-      markdown={`# ${item.title}\n\n**Vault:** ${item.vault.name}\n**Category:** ${item.category}\n**Last Updated:** ${formatDate(item.updatedAt)}\n\n## Fields\n\n${item.fields?.map((f) => `**${f.label}:** ${f.type === "concealed" ? "••••••••" : f.value}`).join("\n\n") || "No fields"}\n\n${item.notesPlain ? `## Notes\n\n${item.notesPlain}` : ""}`}
+      markdown={`# ${item.title}\n\n**Vault:** ${item.vault.name}\n**Category:** ${item.category}\n**Last Updated:** ${formatDate(item.updatedAt)}\n\n## Fields\n\n${item.fields?.map((f: { label: string; type: string; value: string }) => `**${f.label}:** ${f.type === "concealed" ? "••••••••" : f.value}`).join("\n\n") || "No fields"}\n\n${item.notesPlain ? `## Notes\n\n${item.notesPlain}` : ""}`}
       actions={
         <ActionPanel>
           <Action
