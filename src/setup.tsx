@@ -7,10 +7,9 @@ import {
   showToast,
   Toast,
   open,
-  Clipboard,
   Form,
 } from "@raycast/api";
-import { isOPInstalled, isSignedIn, signIn } from "./lib/op-cli";
+import { isOPInstalled, isSignedIn, signInWithCredentials, checkDesktopAppIntegration } from "./lib/op-cli";
 
 export default function Setup() {
   const [isInstalled, setIsInstalled] = useState<boolean | null>(null);
@@ -19,31 +18,12 @@ export default function Setup() {
   const [showSignInForm, setShowSignInForm] = useState(false);
   const [email, setEmail] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [autoChecking, setAutoChecking] = useState(false);
+  const [hasDesktopApp, setHasDesktopApp] = useState<boolean | null>(null);
+  const [signInMethod, setSignInMethod] = useState<"desktop" | "credentials" | null>(null);
 
   useEffect(() => {
     checkStatus();
   }, []);
-
-  // Auto-check status every 3 seconds if user is signing in
-  useEffect(() => {
-    if (autoChecking) {
-      const interval = setInterval(async () => {
-        const signedIn = await isSignedIn();
-        setIsAuthenticated(signedIn);
-        if (signedIn) {
-          setAutoChecking(false);
-          await showToast({
-            style: Toast.Style.Success,
-            title: "Successfully signed in!",
-            message: "You're all set to use the extension",
-          });
-        }
-      }, 3000);
-
-      return () => clearInterval(interval);
-    }
-  }, [autoChecking]);
 
   async function checkStatus() {
     setIsChecking(true);
@@ -52,6 +32,10 @@ export default function Setup() {
       setIsInstalled(installed);
 
       if (installed) {
+        // Check for desktop app integration
+        const desktopAppAvailable = await checkDesktopAppIntegration();
+        setHasDesktopApp(desktopAppAvailable);
+
         const signedIn = await isSignedIn();
         setIsAuthenticated(signedIn);
       } else {
@@ -65,7 +49,42 @@ export default function Setup() {
     }
   }
 
-  async function handleSignIn() {
+  async function handleDesktopAppSignIn() {
+    setIsSigningIn(true);
+    setSignInMethod("desktop");
+    
+    try {
+      // Try sign-in - desktop app integration should handle it automatically
+      const success = await signInWithCredentials();
+      
+      if (success) {
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Successfully signed in!",
+          message: "Desktop app integration worked perfectly",
+        });
+        
+        setIsSigningIn(false);
+        await checkStatus();
+      } else {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Desktop app not available",
+          message: "Please open 1Password app and enable CLI integration in Settings → Developer",
+        });
+        setIsSigningIn(false);
+      }
+    } catch (error: any) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Sign-in failed",
+        message: error.message || "Please enable desktop app integration in 1Password app",
+      });
+      setIsSigningIn(false);
+    }
+  }
+
+  async function handleCredentialSignIn() {
     if (!email.trim()) {
       await showToast({
         style: Toast.Style.Failure,
@@ -76,12 +95,14 @@ export default function Setup() {
     }
 
     setIsSigningIn(true);
+    setSignInMethod("credentials");
+    
     try {
-      // Try automated sign-in
-      const success = await signIn(email.trim());
+      // Try sign-in with email - if desktop app is integrated, it should work
+      // If not, it will guide the user
+      const success = await signInWithCredentials(email.trim());
       
       if (success) {
-        // Successfully signed in automatically!
         await showToast({
           style: Toast.Style.Success,
           title: "Successfully signed in!",
@@ -90,31 +111,21 @@ export default function Setup() {
         
         setShowSignInForm(false);
         setIsSigningIn(false);
-        
-        // Refresh status to show success
+        setEmail("");
         await checkStatus();
       } else {
-        // Need interactive sign-in - terminal was opened
         await showToast({
-          style: Toast.Style.Success,
-          title: "Terminal opened",
-          message: "Complete sign-in in the terminal window",
+          style: Toast.Style.Failure,
+          title: "Sign-in needs desktop app",
+          message: "Please enable CLI integration in 1Password app settings",
         });
-        
-        setShowSignInForm(false);
-        setAutoChecking(true); // Start auto-checking
-        
-        await showToast({
-          style: Toast.Style.Success,
-          title: "Tip",
-          message: "We'll automatically detect when you're signed in",
-        });
+        setIsSigningIn(false);
       }
     } catch (error: any) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Sign-in failed",
-        message: error.message || "Please try again",
+        message: error.message || "Please enable desktop app integration for automatic sign-in",
       });
       setIsSigningIn(false);
     }
@@ -138,7 +149,7 @@ export default function Setup() {
               title="Sign In"
               icon={Icon.Lock}
               shortcut={{ modifiers: ["ctrl"], key: "s" }}
-              onAction={handleSignIn}
+              onAction={handleCredentialSignIn}
             />
             <Action
               title="Cancel"
@@ -147,6 +158,7 @@ export default function Setup() {
               onAction={() => {
                 setShowSignInForm(false);
                 setIsSigningIn(false);
+                setEmail("");
               }}
             />
           </ActionPanel>
@@ -154,7 +166,7 @@ export default function Setup() {
       >
         <Form.Description
           title="Sign In to 1Password"
-          text="Enter your email address. A terminal window will open where you can complete sign-in."
+          text="Enter your email. If you have the 1Password desktop app open with CLI integration enabled, sign-in will be automatic!"
         />
         <Form.TextField
           id="email"
@@ -163,28 +175,33 @@ export default function Setup() {
           value={email}
           onChange={setEmail}
           autoFocus
-          info="Your 1Password account email address"
+          info="Your 1Password account email. Desktop app integration makes this automatic!"
         />
         {isSigningIn && (
           <Form.Description 
             title="Status" 
-            text="Opening terminal... Complete the sign-in process in the terminal window. We'll automatically detect when you're done!" 
+            text="Signing in... If desktop app is open, this will be instant!" 
           />
         )}
+        <Form.Description
+          title="💡 Tip"
+          text="For the easiest experience, open the 1Password app and enable CLI integration in Settings → Developer. Then sign-in becomes automatic!"
+        />
       </Form>
     );
   }
 
   const markdown = `# Welcome to 1Password Extension! 🔐
 
-${getStatusMarkdown(isInstalled, isAuthenticated)}
+${getStatusMarkdown(isInstalled, isAuthenticated, hasDesktopApp)}
 
-${getInstructionsMarkdown(isInstalled, isAuthenticated, autoChecking)}
+${getInstructionsMarkdown(isInstalled, isAuthenticated, hasDesktopApp, isSigningIn, signInMethod)}
 `;
 
   return (
     <Detail
       markdown={markdown}
+      isLoading={isSigningIn}
       actions={
         <ActionPanel>
           {!isInstalled && (
@@ -194,21 +211,27 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated, autoChecking)}
               onAction={() => open("https://developer.1password.com/docs/cli/get-started")}
             />
           )}
-          {isInstalled && !isAuthenticated && (
+          {isInstalled && !isAuthenticated && !isSigningIn && (
             <>
               <Action
-                title="Sign In (Just Enter Email)"
+                title="Sign In with Desktop App (Easiest!)"
+                icon={Icon.Star}
+                shortcut={{ modifiers: ["ctrl"], key: "d" }}
+                onAction={handleDesktopAppSignIn}
+              />
+              <Action
+                title="Sign In with Email"
                 icon={Icon.Lock}
                 shortcut={{ modifiers: ["ctrl"], key: "s" }}
                 onAction={() => setShowSignInForm(true)}
               />
-              {autoChecking && (
-                <Action
-                  title="Stop Auto-Checking"
-                  icon={Icon.Stop}
-                  onAction={() => setAutoChecking(false)}
-                />
-              )}
+              <Action
+                title="Open Desktop App Integration Guide"
+                icon={Icon.Gear}
+                onAction={() => {
+                  open("https://developer.1password.com/docs/cli/app-integration");
+                }}
+              />
               <Action
                 title="Refresh Status"
                 icon={Icon.ArrowClockwise}
@@ -231,7 +254,11 @@ ${getInstructionsMarkdown(isInstalled, isAuthenticated, autoChecking)}
   );
 }
 
-function getStatusMarkdown(isInstalled: boolean | null, isAuthenticated: boolean | null): string {
+function getStatusMarkdown(
+  isInstalled: boolean | null,
+  isAuthenticated: boolean | null,
+  hasDesktopApp: boolean | null
+): string {
   if (!isInstalled) {
     return `## ❌ 1Password CLI Not Installed
 
@@ -239,9 +266,14 @@ Don't worry! It only takes a minute to install.`;
   }
 
   if (!isAuthenticated) {
+    let desktopAppNote = "";
+    if (hasDesktopApp) {
+      desktopAppNote = "\n\n⭐ **Great news!** Desktop app integration is available. Sign-in can be automatic!";
+    }
+    
     return `## ✅ CLI Installed | ❌ Not Signed In
 
-Ready to sign in? It's super easy!`;
+Ready to sign in? Choose the easiest method!${desktopAppNote}`;
   }
 
   return `## ✅ All Set!
@@ -252,38 +284,75 @@ You're ready to use the extension!`;
 function getInstructionsMarkdown(
   isInstalled: boolean | null,
   isAuthenticated: boolean | null,
-  autoChecking: boolean
+  hasDesktopApp: boolean | null,
+  isSigningIn: boolean,
+  signInMethod: "desktop" | "credentials" | null
 ): string {
   if (!isInstalled) {
     return `### Quick Setup (2 minutes)
 
 1. **Click the button below** to open the installation guide
-2. **Download** the Windows installer
-3. **Run** the installer (it's quick!)
-4. **Come back here** and we'll help you sign in
+2. **Download** the Windows installer  
+3. **Run** the installer
+4. **Come back here** to sign in
 
 That's it! 🎉`;
   }
 
   if (!isAuthenticated) {
-    if (autoChecking) {
-      return `### Sign-In in Progress
+    if (isSigningIn) {
+      if (signInMethod === "desktop") {
+        return `### Signing In with Desktop App...
 
-1. **Terminal window opened** - Complete sign-in there
-2. **We're checking automatically** - No need to refresh!
-3. **When done**, you'll see a success message
+**Please wait** while we connect to your 1Password app.
 
-**Tip:** If you have the 1Password app open, sign-in will be instant!`;
+If the app is open and unlocked, this should be instant! ⚡`;
+      }
+      return `### Signing In...
+
+**Please wait** while we authenticate.
+
+If you have the desktop app open with CLI integration enabled, this will be automatic! ⚡`;
     }
 
-    return `### Easy Sign-In (30 seconds)
+    if (hasDesktopApp) {
+      return `### Two Easy Ways to Sign In
 
-1. **Click "Sign In"** button above (or press \`Ctrl+S\`)
-2. **Enter your email** address
-3. **Terminal opens automatically** - just follow the prompts
-4. **We'll detect** when you're done automatically!
+#### ⭐ Option 1: Desktop App (Recommended - Instant!)
+1. **Make sure 1Password app is open** and unlocked
+2. **Enable CLI integration** (if not already):
+   - Open 1Password app
+   - Settings → Developer → "Integrate with 1Password CLI" ✅
+3. **Click "Sign In with Desktop App"** above (or press \`Ctrl+D\`)
+4. **Done!** No password needed - uses Windows Hello! 🎉
 
-**That's it!** No complicated steps. 🚀`;
+#### Option 2: Email Sign-In
+1. **Click "Sign In with Email"** above (or press \`Ctrl+S\`)
+2. **Enter your email**
+3. **If desktop app is integrated**, sign-in is automatic!
+4. **If not**, you'll be guided to enable integration
+
+**Which is better?**
+- Desktop app = **Fastest, most secure** (Windows Hello, no password typing)
+- Email = Works but requires desktop app integration for automation`;
+    }
+
+    return `### Easy Sign-In
+
+#### Recommended: Desktop App Integration
+1. **Install 1Password desktop app** (if not already)
+2. **Open the app** and unlock it
+3. **Enable CLI integration**:
+   - Settings → Developer → "Integrate with 1Password CLI" ✅
+4. **Click "Sign In with Desktop App"** above
+5. **Done!** Instant and secure! ⚡
+
+#### Alternative: Email Sign-In
+1. **Click "Sign In with Email"** above
+2. **Enter your email**
+3. **Follow the prompts** to complete sign-in
+
+**💡 Pro Tip:** Desktop app integration makes everything automatic and uses Windows Hello for security!`;
   }
 
   return `### You're Ready to Go!
@@ -291,7 +360,7 @@ That's it! 🎉`;
 Try these commands:
 
 - **Search Items** - Find and copy passwords instantly
-- **Generate Password** - Create secure passwords
+- **Generate Password** - Create secure passwords  
 - **Manage Vaults** - Browse your vaults
 
 Enjoy! 🎉`;
